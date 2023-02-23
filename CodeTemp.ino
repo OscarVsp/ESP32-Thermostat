@@ -1,6 +1,5 @@
 // TEMPERATURE
-#include <OneWire.h>
-#include <DallasTemperature.h>
+#include "DHT.h"
 #include <SSD1306.h>
 #include <TaskScheduler.h>
 #include <OneButton.h>
@@ -15,7 +14,8 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, 3600);
 
 #define RELAY_PIN 0
-#define ONE_WIRE_BUS 17
+#define DHTPIN 17
+#define DHTTYPE DHT22   // DHT 22  (AM2302)
 #define RX1PIN 35
 #define TX1PIN 13
 #define BTN_P_PIN 13
@@ -23,21 +23,19 @@ NTPClient timeClient(ntpUDP, 3600);
 #define BTN_T_PIN 21
 #define BTN_M_PIN 23
 
-#define TEMP_INTERVAL 5000  //10sec
-#define CTRL_START 60000    //1 min
+#define TEMP_INTERVAL 5000  //5sec
+#define CTRL_START 120000    //2 min
 #define NTP_UPDATE 86400000  //1 Hour
-#define SIZE_TEMPS 24  //1min mean
-#define T_OFFSET -0.7
-#define T_MARG_HIGH 0.2
+#define SIZE_DATAS 24  //2min mean_temp
+#define T_MARG_HIGH 0.15
 #define T_MARG_LOW 0.0
-#define VAR_STABLE 0.05
 
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-float temps[SIZE_TEMPS];
-float mean;
-float var;
-bool init_temp = 0;  //stable measure
+DHT dht(DHTPIN, DHTTYPE);
+float temps[SIZE_DATAS] = {NAN};
+float humi[SIZE_DATAS] = {NAN};
+int idx = -1;
+float mean_temp;
+float mean_humi;
 bool user_mode = 0;        //0 Manual, 1 Auto
 int temp_mode = 0;      //0 nuit, 1 jour, 2 antigel
 float target_temp = 15;   //day = 18, night = 15, freeze = 5
@@ -51,19 +49,25 @@ float temp_freeze = 5;    //temp_mode = 2
 SSD1306 display(0x3c, 4, 15);
 
 bool ntp_init = 0;
+bool ntp_state = 0;
 
-int last_temp_mean = 0;
+float last_temp_mean = 0;
+float last_humi_mean = 0;
 bool last_heat_state = 0;
+
+Scheduler runner;
 
 void btn_tick();
 void temperature();
+void wifi_wakeup();
 void ntp();
 
 Task task_btn_tick(40, TASK_FOREVER, &btn_tick);
 Task task_temperature(TEMP_INTERVAL, TASK_FOREVER, &temperature);
+Task task_wifi_wakeup(NTP_UPDATE, TASK_FOREVER, &wifi_wakeup);
 Task task_ntp(NTP_UPDATE, TASK_FOREVER, &ntp);
 
-Scheduler runner;
+
 
 OneButton BTN_P = OneButton(
   BTN_P_PIN,  // Input pin for the button
@@ -168,11 +172,15 @@ void begin_display() {
   delay(50);
   digitalWrite(16, HIGH);  // while OLED is running, must set GPIO16 in high、
   display.init();
-  display.flipScreenVertically();
+  //display.flipScreenVertically();
   display.setBrightness(63);
 }
 
 String temp_to_string(float temp) {
+  if (isnan(temp)){
+    return "--.- °C";
+  }
+
   if (temp >= 10 || temp < 0) {
     if (temp > -10) {
       return String(temp, 1) + "°C";
@@ -184,6 +192,27 @@ String temp_to_string(float temp) {
   }
 }
 
+String humi_to_string(float humi) {
+  if (isnan(humi)){
+    return "H: --.- %";
+  }
+  return "H: "+String(humi, 1) + "%";
+}
+
+void time_setup(){
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  begin_display();
+  timeClient.begin();
+  delay(2000);
+  if (WiFi.status() == WL_CONNECTED) {
+    ntp_init = 1;
+    ntp_state = 1;
+    timeClient.update();
+    Serial.println("Time updated !");
+  }
+  WiFi.disconnect(true);
+}
 
 
 
@@ -197,26 +226,17 @@ void setup() {
   BTN_T.attachClick(onBTN_T_clicked);
   BTN_T.attachLongPressStart(onBTN_T_pressed);
   BTN_M.attachLongPressStart(onBTN_M_pressed);
-  sensors.begin();
-  sensors.requestTemperatures();
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  timeClient.begin();
-  begin_display();
-  delay(5000);
-  sensors.requestTemperatures();
-  temps[0] = sensors.getTempCByIndex(0) + T_OFFSET;
-  for (int i = 1; i < SIZE_TEMPS; i++) {
-    temps[i] = temps[0];
-  }
+  dht.begin();
+  time_setup();
   update_display();
   runner.init();
   runner.addTask(task_btn_tick);
   runner.addTask(task_temperature);
+  runner.addTask(task_wifi_wakeup);
   runner.addTask(task_ntp);
   task_btn_tick.enable();
   task_temperature.enable();
-  task_ntp.enable();
+  task_wifi_wakeup.enable();
 }
 
 
@@ -229,16 +249,20 @@ void update_display() {
 
   //Main T°C
   display.setFont(ArialMT_Plain_24);
-  display.drawString(0, 4, temp_to_string(mean));
+  display.drawString(0, 4, temp_to_string(mean_temp));
 
+  //Humidity
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(0, 29, humi_to_string(mean_humi));
 
   //Time
-  if (!ntp_init)
+  if (ntp_init){
     display.setFont(ArialMT_Plain_24);
-  display.drawString(0, 40, timeClient.getFormattedTime().substring(0, 5));
+    display.drawString(0, 40, timeClient.getFormattedTime().substring(0, 5));
+  }
 
   //WiFi
-  if (WiFi.status() == WL_CONNECTED) {
+  if (ntp_state) {
     display.setFont(ArialMT_Plain_10);
     display.drawString(60, 50, "@");
   }
@@ -275,65 +299,94 @@ void update_display() {
   display.display();
 }
 
-void temperature_mes(bool setup = 0) {
-  var = 0;
-  mean = 0;
-  //Shift all values (more perfomant way ?)
-  for (int i = SIZE_TEMPS - 1; i > 0; i--) {
-    temps[i] = temps[i - 1];
-    mean += temps[i];
-    var += temps[i] * temps[i];
+void temperature_mes() {
+  //INDEX
+  if (idx < SIZE_DATAS - 1){
+    idx++;
+  } else {
+    idx=0;
   }
-  //Add new value
+  //TEMP
+  float t = dht.readTemperature();
+  if (isnan(t)){
+    Serial.println("Failed to read temp from DHT sensor!");
+    //Add screen indicator ?
+    return;
+  }
+  temps[idx] = t;
+  float n = 0;
+  mean_temp = 0;
+  for (int i = 0; i < SIZE_DATAS; i++) {
+    if (!isnan(temps[i])){
+      mean_temp += temps[i];
+      n++;
+    }
+  }
+  mean_temp = mean_temp / n;
   
-  //Serial.println("Temp duration :"+String((millis()-last_temp)));
-  sensors.requestTemperatures();
+  //HUMI
   btn_tick();
-  temps[0] = sensors.getTempCByIndex(0) + T_OFFSET;
-  mean += temps[0];
-  var += temps[0] * temps[0];
-  mean = mean / SIZE_TEMPS;
-  var = (var / SIZE_TEMPS) - (mean * mean);
-  
-  if (var < 0) { var = -var; }
-  if (setup == 0 && init_temp == 0 && var < VAR_STABLE) {
-    init_temp = 1;
+  float h = dht.readHumidity();
+  if (isnan(t)){
+    Serial.println("Failed to read humi from DHT sensor!");
+    //Add screen indicator ?
+    return;
   }
+  n = 0;
+  humi[idx] = h;
+  mean_humi = 0;
+  for (int i = 0; i < SIZE_DATAS; i++) {
+    if (!isnan(humi[i])){
+      mean_humi += humi[i];
+      n++;
+    }
+  }
+  mean_humi = mean_humi / n;
 }
 
 
 void control() {
-  if (init_temp == 1) {  
-    if (digitalRead(RELAY_PIN) == 0) {
-      if ((mean < (target_temp - T_MARG_LOW)) && (temps[0] < (target_temp - T_MARG_HIGH))) {
-        digitalWrite(RELAY_PIN, 1);
-      }
-    } else {
-      if ((mean > (target_temp - T_MARG_HIGH)) && (temps[0] > (target_temp - T_MARG_LOW))) {
-        digitalWrite(RELAY_PIN, 0);
-      }
+  if (millis() < CTRL_START){
+    return;
+  }
+  if (digitalRead(RELAY_PIN) == 0) {
+    if (mean_temp < (target_temp - T_MARG_HIGH)) {
+      digitalWrite(RELAY_PIN, 1);
+    }
+  } else {
+    if (temps[idx] > (target_temp - T_MARG_LOW)) {
+      digitalWrite(RELAY_PIN, 0);
     }
   }
 }
 
 void temperature() {
-  last_temp_mean = mean;
+  last_temp_mean = mean_temp;
+  last_humi_mean = mean_humi;
   last_heat_state = digitalRead(RELAY_PIN);
-  temperature_mes(millis() < CTRL_START);
+  temperature_mes();
   control();
-  if (last_temp_mean != mean || last_heat_state != digitalRead(RELAY_PIN)){
+
+  if (last_temp_mean != mean_temp || last_humi_mean != mean_humi || last_heat_state != digitalRead(RELAY_PIN)){
       update_display();
   }
-  Serial.println(String(temps[0]) + "," + String(mean) + "," + target_temp + "," + String(var)+""+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
+  Serial.println(String(temps[idx]) + "," + String(mean_temp) + "," + target_temp +","+String(humi[idx]) + "," + String(mean_humi) + "," + String(idx) + ","+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
+}
+
+void wifi_wakeup(){
+  WiFi.reconnect();
+  task_ntp.delay(5000);
 }
 
 void ntp(){
-  if (WiFi.status() == WL_CONNECTED && ntp_init == 0) {
-    if (ntp_init == 0) {
-      ntp_init = 1;
-    }
+  if (WiFi.status() == WL_CONNECTED) {
+    ntp_init = 1;
+    ntp_state = 1;
     timeClient.update();
+  } else {
+    ntp_state = 0;
   }
+  WiFi.disconnect(true);
 }
 
 void loop() {
