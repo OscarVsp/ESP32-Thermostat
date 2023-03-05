@@ -28,14 +28,12 @@
 #define NTP_UPDATE 86400000  //1 Hour
 #define NTP_RETRY 10000  //10 sec
 #define SIZE_DATAS 6  //30sec mean_temp
-#define T_MARG_HIGH 0.10
-#define T_MARG_LOW 0.0
+#define T_MARG_HIGH 0.15
+#define T_MARG_LOW 0.05
 
 /*
   INITIALIZATIONS
 */
-
-bool started = 0;
 
 //Display
 SSD1306 display(0x3c, 4, 15);
@@ -197,8 +195,8 @@ const unsigned char epd_bitmap_freeze [] PROGMEM = {
 };
 // 'target', 16x16px
 const unsigned char epd_bitmap_target [] PROGMEM = {
-	0x80, 0x01, 0x80, 0x01, 0xc0, 0x03, 0xf0, 0x0f, 0xb8, 0x1d, 0x98, 0x19, 0x0c, 0x30, 0xbf, 0xfd, 
-	0xbf, 0xfd, 0x0c, 0x30, 0x98, 0x19, 0xb8, 0x1d, 0xf0, 0x0f, 0xc0, 0x03, 0x80, 0x01, 0x80, 0x01
+	0x00, 0x00, 0xc0, 0x03, 0xc0, 0x03, 0xc0, 0x03, 0xc0, 0x03, 0xc0, 0x03, 0xc0, 0x03, 0xc0, 0x03, 
+	0xf0, 0x0f, 0xf0, 0x0f, 0xf0, 0x0f, 0xe0, 0x07, 0xc0, 0x03, 0x80, 0x01, 0x80, 0x01, 0x00, 0x00
 };
 // 'sensor', 24x10px
 const unsigned char epd_bitmap_sensor [] PROGMEM = {
@@ -291,7 +289,7 @@ void update_display() {
   display.setTextAlignment(TEXT_ALIGN_RIGHT);
   //Target T°C
   display.setFont(ArialMT_Plain_16);
-  display.drawFastImage(70, 0, 16, 16, epd_bitmap_target);
+  display.drawFastImage(75, 0, 16, 16, epd_bitmap_target);
   display.drawString(128, 0, temp_to_string(target_temp));
   //States
   if (user_mode == 1) {display.drawFastImage(70, 25, 16, 16, epd_bitmap_auto);}
