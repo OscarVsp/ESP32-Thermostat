@@ -29,7 +29,7 @@
 #define NTP_RETRY 10000  //10 sec
 #define SIZE_DATAS 6  //30sec mean_temp
 #define T_MARG_HIGH 0.15
-#define T_MARG_LOW 0.05
+#define T_MARG_LOW 0.075
 
 /*
   INITIALIZATIONS
@@ -347,8 +347,8 @@ void control() {
     return;
   }
   
-  if (digitalRead(RELAY_PIN) == 0) {if (mean_temp < (target_temp - T_MARG_HIGH)) {digitalWrite(RELAY_PIN, 1);}
-  } else {if (temps[idx] > (target_temp - T_MARG_LOW)) {digitalWrite(RELAY_PIN, 0);}}
+  if (digitalRead(RELAY_PIN) == 0) {if (mean_temp <= (target_temp - T_MARG_HIGH)) {digitalWrite(RELAY_PIN, 1);}
+  } else {if (temps[idx] >= (target_temp - T_MARG_LOW)) {digitalWrite(RELAY_PIN, 0);}}
 }
 
 void temperature() {
@@ -359,7 +359,7 @@ void temperature() {
   control();
 
   if (last_temp_mean != mean_temp || last_humi_mean != mean_humi || last_heat_state != digitalRead(RELAY_PIN)){update_display();}
-  Serial.println(String(temps[idx]) + "," + String(mean_temp) + "," + target_temp +","+String(humi[idx]) + "," + String(mean_humi) + "," + String(idx) + ","+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
+  Serial.println(String(temps[idx]) + "," + String(mean_temp) + "," + target_temp +","+String(humi[idx]) + "," + String(mean_humi) + ","+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
 }
 
 void wifi_wakeup(){

@@ -22,5 +22,3 @@ It currently sync the time over WiFi and NTP, read the temperature and humidity,
 - Auto mode: make the programmable mode with time
 - Custom PCB
 - 3D printed case for wall mount
-
-
