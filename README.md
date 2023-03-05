@@ -11,7 +11,7 @@ It doesn't use the LoRa and only connect to the WiFi occasionally to get NTP syn
 
 ## Current state
 
-It currently sync the time over WiFi and NTP, read the temperature and humidity, use the button to change the target temperature and display all available informations on the display with nice icon.
+It currently sync the time over WiFi and NTP, read the temperature and humidity, use the button to change the target temperature, display all available informations on the display with nice icon, and of course control the temperature with the relay.
 
 ![Proto image](https://github.com/OscarVsp/ESP32-Thermostat/blob/main/images/proto.jpg?raw=true)
 
