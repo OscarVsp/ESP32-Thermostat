@@ -39,8 +39,8 @@
 SSD1306 display(0x3c, 4, 15);
 
 //WiFi & ntp
-const char* ssid = "telenet-38BBB15";
-const char* password = "aRya4dsdeN3p";
+const char* ssid = "";
+const char* password = "";
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, 3600);
 bool wifi_state = 0;
