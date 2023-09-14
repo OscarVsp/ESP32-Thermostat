@@ -1,5 +1,7 @@
 import sys
-from PIL import Image
+from PIL import Image, ImageOps
+
+
 
 if __name__ == "__main__":
     try:
@@ -36,7 +38,7 @@ if __name__ == "__main__":
         print('Argument "Rotation" not found after "-r"')
         exit(1)
     except ValueError:
-        rotate = 1
+        rotate = 3
         
     print(f"Image: {filename}\nSize: {size[0]}x{size[1]}\nRotation: {90*rotate}°")
     
@@ -44,11 +46,15 @@ if __name__ == "__main__":
         
         
     with Image.open(filename) as img:
-        img_BW = img.convert("1")
-        img_rot = img_BW.rotate(90*rotate)
-        img_rez = img_rot.resize(size, Image.ANTIALIAS)
-        bitmap = img_rez.tobitmap(name=name)
-        print(bitmap)
-        """for i in range(len(bitmap)):
-            print(hex(bitmap[i]), end=", ")"""
+        img = ImageOps.invert(img).convert("1").rotate(90*rotate).resize(size, Image.ANTIALIAS)
+        img_bt = img.tobitmap(name=name)
+        img_bt = str(img_bt)[2:-1].split('\\n')
+        n_bytes_lines = len(img_bt)-4
+        defines = img_bt[0]+"\n"+img_bt[1]
+        bytes_str = "".join(img_bt[3:-1]).split(',')
+        n_lines = (len(bytes_str)-1)//16 + 1
+        bitmap_lines = []
+        for n in range(n_lines):
+            bitmap_lines.append(", ".join(bytes_str[n*16:(n+1)*16 if (n+1)*16 < len(bytes_str) else len(bytes_str)]))
+        print("const unsigned char "+name+"[] PROGMEM = {\n  "+',\n  '.join(bitmap_lines)+"\n};")
         
