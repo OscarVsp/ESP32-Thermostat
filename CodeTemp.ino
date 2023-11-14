@@ -24,7 +24,7 @@
 #define BTN_M_PIN 23
 
 #define TEMP_INTERVAL 5000  //5sec
-#define CTRL_START 30000    //15 min
+#define CTRL_START 30000    //30 sec
 #define NTP_UPDATE 86400000  //1 Hour
 #define NTP_RETRY 10000  //10 sec
 #define SIZE_DATAS 6  //30sec mean_temp
@@ -39,10 +39,11 @@
 SSD1306 display(0x3c, 4, 15);
 
 //WiFi & ntp
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "telenet-38BBB15";
+const char* password = "aRya4dsdeN3p";
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, 3600);
+NTPClient timeClient(ntpUDP, "be.pool.ntp.org");
+
 bool wifi_state = 0;
 bool ntp_state = 0;
 
@@ -120,15 +121,9 @@ void onBTN_M_pressed(){
   if (user_mode == 0){
     temp_mode = 1;
     target_temp = temp_day;
-    control();
-    update_display();
-  } else if (user_mode == 1){
-    //TODO schedule
-    temp_mode = 1;
-    target_temp = temp_day;
-    control();
-    update_display();
   }
+  control();
+  update_display();
 }
 
 void onBTN_T_clicked() {
@@ -162,6 +157,10 @@ String humi_to_string(float humi) {
   if (isnan(humi)){return "--.- %";} else {return ""+String(humi, 1) + "%";}
 }
 
+float getHours(){
+  return (float) timeClient.getHours() + ((float) timeClient.getMinutes())/60;
+}
+
 // 'drop', 16x10px
 const unsigned char epd_bitmap_drop [] PROGMEM = {
 	0x00, 0x1f, 0xc0, 0x3f, 0x70, 0x7c, 0x1c, 0xfc, 0x0e, 0xfc, 0x0e, 0xfc, 0x1c, 0xfc, 0x70, 0x7c,
@@ -178,6 +177,7 @@ const unsigned char epd_bitmap_auto [] PROGMEM = {
 	0xe0, 0x07, 0xf8, 0x1f, 0x1c, 0x38, 0x0e, 0x70, 0x06, 0x60, 0x03, 0xc0, 0x03, 0xc0, 0xf3, 0xc1,
 	0x03, 0xc3, 0x03, 0xc2, 0x03, 0xc6, 0x06, 0x64, 0x0e, 0x70, 0x1c, 0x38, 0xf8, 0x1f, 0xe0, 0x07
 };
+
 // 'day', 16x16px
 const unsigned char epd_bitmap_day [] PROGMEM = {
 	0x80, 0x01, 0x80, 0x01, 0x8c, 0x31, 0x1c, 0x30, 0xd8, 0x1b, 0xe0, 0x07, 0x30, 0x0c, 0x37, 0xec,
@@ -346,7 +346,25 @@ void control() {
     if (millis() >= CTRL_START){task_update_display.disable();}
     return;
   }
+
+  //Mode auto
+  if (user_mode == 1) {
+    float currentTime = getHours();
+    if (currentTime < 5.0){
+      temp_mode = 0;
+      target_temp = temp_night;
+    } else if (currentTime < 7.5)
+    {
+      temp_mode = 1;
+      target_temp = temp_day; 
+    } else
+    {
+      temp_mode = 0;
+      target_temp = temp_night; 
+    }
+  }
   
+  //Regulator
   if (digitalRead(RELAY_PIN) == 0) {if (mean_temp <= (target_temp - T_MARG_HIGH)) {digitalWrite(RELAY_PIN, 1);}
   } else {if (temps[idx] >= (target_temp - T_MARG_LOW)) {digitalWrite(RELAY_PIN, 0);}}
 }
@@ -359,7 +377,7 @@ void temperature() {
   control();
 
   if (last_temp_mean != mean_temp || last_humi_mean != mean_humi || last_heat_state != digitalRead(RELAY_PIN)){update_display();}
-  Serial.println(String(temps[idx]) + "," + String(mean_temp) + "," + target_temp +","+String(humi[idx]) + "," + String(mean_humi) + ","+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
+  Serial.println(String(getHours()) + "," + (temps[idx]) + "," + String(mean_temp) + "," + target_temp +","+String(humi[idx]) + "," + String(mean_humi) + ","+String(user_mode)+","+String(digitalRead(RELAY_PIN)));   
 }
 
 void wifi_wakeup(){
