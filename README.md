@@ -1,6 +1,8 @@
 # ESP32 - THERMOSTAT
 
-This is a thermostat build for my home usage using:
+This is a thermostat built in a weekend for my home usage because the Chacon one I just bought was trash.
+
+It is using:
 
 - Heltec ESP32 WiFi LoRa 32
 - SSD1306 OLED display
